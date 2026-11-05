@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Guiana Brasileira</title>
+<style>
+  body { margin: 0; background: #2c3e50; font-family: Arial, sans-serif; color: white; text-align: center; }
+  #topo { padding: 8px; }
+  #topo input[type=text] { padding: 6px; border-radius: 6px; border: none; width: 140px; }
+  #topo input[type=color] { vertical-align: middle; border: none; width: 36px; height: 30px; }
+  #topo button { padding: 6px 12px; border: none; border-radius: 6px; background: #f1c40f; cursor: pointer; font-weight: bold; }
+  canvas { background: #7ec850; border: 4px solid #1e2b37; border-radius: 8px; cursor: pointer; max-width: 98vw; }
+  #dica { font-size: 13px; opacity: 0.8; padding: 4px; }
+</style>
+</head>
+<body>
+<div id="topo">
+  Nome: <input type="text" id="nome" maxlength="14" placeholder="Seu nome">
+  Cor: <input type="color" id="cor" value="#e74c3c">
+  <button id="ok">Entrar na vila</button>
+</div>
+<canvas id="tela" width="1200" height="800"></canvas>
+<div id="dica">Clique no chão para o seu personagem caminhar até lá.</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const tela = document.getElementById('tela');
+const ctx = tela.getContext('2d');
+
+let meuId = null;
+const jogadores = {};
+
+// Comércios da vila (x, y, largura, altura, cor do telhado, nome)
+const comercios = [
+  { x: 160, y: 140, l: 180, a: 120, telhado: '#c0392b', nome: 'Padaria' },
+  { x: 460, y: 110, l: 200, a: 130, telhado: '#2980b9', nome: 'Fliperama' },
+  { x: 800, y: 150, l: 180, a: 120, telhado: '#8e44ad', nome: 'Loja de Jogos' }
+];
+
+const arvores = [
+  [80, 520], [140, 640], [1060, 520], [1100, 660], [300, 700],
+  [900, 700], [60, 330], [1120, 340], [700, 620], [480, 680]
+];
+
+socket.on('estadoInicial', (dados) => {
+  meuId = dados.meuId;
+  Object.assign(jogadores, dados.jogadores);
+});
+socket.on('jogadorEntrou', (j) => { jogadores[j.id] = j; });
+socket.on('jogadorSaiu', (id) => { delete jogadores[id]; });
+socket.on('perfilAtualizado', (p) => {
+  if (jogadores[p.id]) { jogadores[p.id].nome = p.nome; jogadores[p.id].cor = p.cor; }
+});
+socket.on('posicoes', (pos) => {
+  for (const id in pos) {
+    if (jogadores[id]) { jogadores[id].x = pos[id].x; jogadores[id].y = pos[id].y; }
+  }
+});
+
+document.getElementById('ok').onclick = () => {
+  socket.emit('definirPerfil', {
+    nome: document.getElementById('nome').value,
+    cor: document.getElementById('cor').value
+  });
+};
+
+// Clique para andar
+tela.addEventListener('click', (e) => {
+  const r = tela.getBoundingClientRect();
+  const x = (e.clientX - r.left) * (tela.width / r.width);
+  const y = (e.clientY - r.top) * (tela.height / r.height);
+  // Se clicou num comércio, anda até a porta dele
+  for (const c of comercios) {
+    if (x > c.x && x < c.x + c.l && y > c.y && y < c.y + c.a) {
+      socket.emit('andarPara', { x: c.x + c.l / 2, y: c.y + c.a + 30 });
+      return;
+    }
+  }
+  socket.emit('andarPara', { x, y });
+});
+
+function desenharCasa(c) {
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(c.x + 10, c.y + c.a - 4, c.l, 14);
+  // parede da frente
+  ctx.fillStyle = '#f5e6c8';
+  ctx.fillRect(c.x, c.y + 40, c.l, c.a - 40);
+  // telhado inclinado
+  ctx.fillStyle = c.telhado;
+  ctx.beginPath();
+  ctx.moveTo(c.x - 12, c.y + 44);
+  ctx.lineTo(c.x + 24, c.y);
+  ctx.lineTo(c.x + c.l - 24, c.y);
+  ctx.lineTo(c.x + c.l + 12, c.y + 44);
+  ctx.closePath();
+  ctx.fill();
+  // porta
+  ctx.fillStyle = '#6d4c2f';
+  ctx.fillRect(c.x + c.l / 2 - 16, c.y + c.a - 50, 32, 50);
+  // janelas
+  ctx.fillStyle = '#9ad7f5';
+  ctx.fillRect(c.x + 20, c.y + 60, 36, 30);
+  ctx.fillRect(c.x + c.l - 56, c.y + 60, 36, 30);
+  // placa
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(c.nome, c.x + c.l / 2, c.y + 36);
+}
+
+function desenharArvore(x, y) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(x, y + 28, 26, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#7b5230';
+  ctx.fillRect(x - 7, y, 14, 30);
+  ctx.fillStyle = '#2e8b3d';
+  ctx.beginPath(); ctx.arc(x, y - 10, 30, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3fae51';
+  ctx.beginPath(); ctx.arc(x - 8, y - 18, 16, 0, Math.PI * 2); ctx.fill();
+}
+
+function desenharJogador(j) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(j.x, j.y + 22, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // corpo
+  ctx.fillStyle = j.cor;
+  ctx.fillRect(j.x - 10, j.y - 6, 20, 26);
+  // cabeça
+  ctx.fillStyle = '#ffd7b0';
+  ctx.beginPath(); ctx.arc(j.x, j.y - 14, 11, 0, Math.PI * 2); ctx.fill();
+  // olhos
+  ctx.fillStyle = '#222';
+  ctx.fillRect(j.x - 5, j.y - 16, 3, 3);
+  ctx.fillRect(j.x + 2, j.y - 16, 3, 3);
+  // nome
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.strokeText(j.nome, j.x, j.y - 32);
+  ctx.fillText(j.nome, j.x, j.y - 32);
+}
+
+function desenhar() {
+  ctx.clearRect(0, 0, tela.width, tela.height);
+  // caminho de terra
+  ctx.fillStyle = '#d9b97a';
+  ctx.fillRect(0, 330, 1200, 110);
+  ctx.fillRect(560, 250, 90, 100);
+  // praça central
+  ctx.beginPath(); ctx.ellipse(600, 420, 120, 60, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c9a869'; ctx.fill();
+  // fonte
+  ctx.fillStyle = '#7fb8e8';
+  ctx.beginPath(); ctx.ellipse(600, 420, 40, 20, 0, 0, Math.PI * 2); ctx.fill();
+
+  // desenha tudo ordenado por altura (quem está mais abaixo aparece na frente)
+  const itens = [];
+  comercios.forEach(c => itens.push({ y: c.y + c.a, f: () => desenharCasa(c) }));
+  arvores.forEach(a => itens.push({ y: a[1] + 30, f: () => desenharArvore(a[0], a[1]) }));
+  Object.values(jogadores).forEach(j => itens.push({ y: j.y + 20, f: () => desenharJogador(j) }));
+  itens.sort((a, b) => a.y - b.y).forEach(i => i.f());
+
+  requestAnimationFrame(desenhar);
+}
+desenhar();
+</script>
+</body>
+</html>
