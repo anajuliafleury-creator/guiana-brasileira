@@ -8,32 +8,34 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// Tamanho do mundo (em pixels)
-const MUNDO_L = 1200;
-const MUNDO_A = 800;
+// Tamanho do mundo = tamanho da imagem de fundo (em pixels)
+const MUNDO_L = 896;
+const MUNDO_A = 1200;
+
+// Área onde dá para caminhar: da frente das lojas até a parte de baixo
+const MIN_X = 30;
+const MAX_X = MUNDO_L - 30;
+const MIN_Y = 690;
+const MAX_Y = MUNDO_A - 50;
 
 // Todos os jogadores conectados
 const jogadores = {};
 
 io.on('connection', (socket) => {
-  // Novo jogador nasce na praça central
+  // Novo jogador nasce no meio da praça
   jogadores[socket.id] = {
     id: socket.id,
     nome: 'Visitante',
     cor: '#e74c3c',
-    x: 600,
-    y: 420,
-    destinoX: 600,
-    destinoY: 420
+    x: 448,
+    y: 800,
+    destinoX: 448,
+    destinoY: 800
   };
 
-  // Manda para o novo jogador a lista de todos
   socket.emit('estadoInicial', { meuId: socket.id, jogadores });
-
-  // Avisa os outros que alguém chegou
   socket.broadcast.emit('jogadorEntrou', jogadores[socket.id]);
 
-  // Jogador escolheu nome e cor
   socket.on('definirPerfil', (perfil) => {
     const j = jogadores[socket.id];
     if (!j) return;
@@ -42,19 +44,11 @@ io.on('connection', (socket) => {
     io.emit('perfilAtualizado', { id: j.id, nome: j.nome, cor: j.cor });
   });
 
-  // Jogador clicou em algum lugar para andar
   socket.on('andarPara', (destino) => {
     const j = jogadores[socket.id];
     if (!j) return;
-    j.destinoX = Math.max(20, Math.min(MUNDO_L - 20, Number(destino.x) || j.x));
-    j.destinoY = Math.max(20, Math.min(MUNDO_A - 20, Number(destino.y) || j.y));
-    io.emit('jogadorAndando', {
-      id: j.id,
-      x: j.x,
-      y: j.y,
-      destinoX: j.destinoX,
-      destinoY: j.destinoY
-    });
+    j.destinoX = Math.max(MIN_X, Math.min(MAX_X, Number(destino.x) || j.x));
+    j.destinoY = Math.max(MIN_Y, Math.min(MAX_Y, Number(destino.y) || j.y));
   });
 
   socket.on('disconnect', () => {
@@ -64,8 +58,9 @@ io.on('connection', (socket) => {
 });
 
 // O servidor move os jogadores 20 vezes por segundo
-const VELOCIDADE = 3;
+const VELOCIDADE = 5;
 setInterval(() => {
+  const posicoes = {};
   for (const id in jogadores) {
     const j = jogadores[id];
     const dx = j.destinoX - j.x;
@@ -78,10 +73,7 @@ setInterval(() => {
       j.x = j.destinoX;
       j.y = j.destinoY;
     }
-  }
-  const posicoes = {};
-  for (const id in jogadores) {
-    posicoes[id] = { x: jogadores[id].x, y: jogadores[id].y };
+    posicoes[id] = { x: j.x, y: j.y };
   }
   io.emit('posicoes', posicoes);
 }, 50);
