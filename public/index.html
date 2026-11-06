@@ -29,23 +29,40 @@ const socket = io();
 const tela = document.getElementById('tela');
 const ctx = tela.getContext('2d');
 
-const fundo = new Image();
-fundo.src = 'image_7175d5d7.jpg';
+// Cada lugar: imagem, tamanho da tela e recorte da imagem (se tiver)
+const SALAS = {
+  vila: { img: 'image_7175d5d7.jpg', l: 896, a: 1200, corte: null },
+  rosa: { img: 'image_b13bcd14.jpg', l: 896, a: 823, corte: [0, 257, 896, 823] }
+};
+const fundos = {};
+for (const k in SALAS) { fundos[k] = new Image(); fundos[k].src = SALAS[k].img; }
 
+// Áreas clicáveis de cada lugar. 'porta' troca de lugar; 'ponto' é onde o personagem anda.
+const ALVOS = {
+  vila: [
+    { porta: 'rosa', x: 0, y: 390, l: 315, a: 280 },
+    { ponto: [460, 705], x: 315, y: 345, l: 310, a: 305 },
+    { ponto: [715, 725], x: 625, y: 395, l: 271, a: 295 }
+  ],
+  rosa: [
+    { porta: 'sair', x: 612, y: 88, l: 88, a: 133 }
+  ]
+};
+
+let sala = 'vila';
 let meuId = null;
 const jogadores = {};
 
-// Lojas: área clicável (x, y, l, a) e ponto de chegada na frente da porta
-const lojas = [
-  { nome: 'Nossa Rosa',   x: 0,   y: 390, l: 315, a: 280, portaX: 195, portaY: 715 },
-  { nome: 'Onça Pintada', x: 315, y: 345, l: 310, a: 305, portaX: 460, portaY: 705 },
-  { nome: 'Vish Sô',      x: 625, y: 395, l: 271, a: 295, portaX: 715, portaY: 725 }
-];
+function trocarLugar(nova, lista) {
+  sala = nova;
+  tela.width = SALAS[nova].l;
+  tela.height = SALAS[nova].a;
+  for (const id in jogadores) delete jogadores[id];
+  Object.assign(jogadores, lista);
+}
 
-socket.on('estadoInicial', (dados) => {
-  meuId = dados.meuId;
-  Object.assign(jogadores, dados.jogadores);
-});
+socket.on('estadoInicial', (d) => { meuId = d.meuId; trocarLugar(d.sala, d.jogadores); });
+socket.on('trocouSala', (d) => { trocarLugar(d.sala, d.jogadores); });
 socket.on('jogadorEntrou', (j) => { jogadores[j.id] = j; });
 socket.on('jogadorSaiu', (id) => { delete jogadores[id]; });
 socket.on('perfilAtualizado', (p) => {
@@ -71,9 +88,10 @@ tela.addEventListener('click', (e) => {
   const r = tela.getBoundingClientRect();
   const x = (e.clientX - r.left) * (tela.width / r.width);
   const y = (e.clientY - r.top) * (tela.height / r.height);
-  for (const loja of lojas) {
-    if (x > loja.x && x < loja.x + loja.l && y > loja.y && y < loja.y + loja.a) {
-      socket.emit('andarPara', { x: loja.portaX, y: loja.portaY });
+  for (const alvo of ALVOS[sala]) {
+    if (x > alvo.x && x < alvo.x + alvo.l && y > alvo.y && y < alvo.y + alvo.a) {
+      if (alvo.porta) socket.emit('andarPara', { porta: alvo.porta });
+      else socket.emit('andarPara', { x: alvo.ponto[0], y: alvo.ponto[1] });
       return;
     }
   }
@@ -86,27 +104,21 @@ function desenharJogador(j) {
   ctx.save();
   ctx.translate(j.x, j.y);
   ctx.scale(ESC, ESC);
-  // sombra
   ctx.fillStyle = 'rgba(60,80,110,0.3)';
   ctx.beginPath(); ctx.ellipse(0, 22, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
-  // corpo
   ctx.fillStyle = j.cor;
   ctx.fillRect(-10, -6, 20, 26);
-  // cabeça
   ctx.fillStyle = '#ffd7b0';
   ctx.beginPath(); ctx.arc(0, -14, 11, 0, Math.PI * 2); ctx.fill();
-  // gorro de inverno
   ctx.fillStyle = j.cor;
   ctx.beginPath(); ctx.arc(0, -17, 11, Math.PI, 0); ctx.fill();
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(-11, -18, 22, 4);
   ctx.beginPath(); ctx.arc(0, -29, 3.5, 0, Math.PI * 2); ctx.fill();
-  // olhos
   ctx.fillStyle = '#222';
   ctx.fillRect(-5, -14, 3, 3);
   ctx.fillRect(2, -14, 3, 3);
   ctx.restore();
-  // nome
   ctx.fillStyle = '#fff';
   ctx.strokeStyle = '#000';
   ctx.lineWidth = 4;
@@ -117,14 +129,16 @@ function desenharJogador(j) {
 }
 
 function desenhar() {
+  const S = SALAS[sala];
+  const f = fundos[sala];
   ctx.clearRect(0, 0, tela.width, tela.height);
-  if (fundo.complete && fundo.naturalWidth) {
-    ctx.drawImage(fundo, 0, 0, tela.width, tela.height);
+  if (f.complete && f.naturalWidth) {
+    if (S.corte) ctx.drawImage(f, S.corte[0], S.corte[1], S.corte[2], S.corte[3], 0, 0, S.l, S.a);
+    else ctx.drawImage(f, 0, 0, S.l, S.a);
   } else {
     ctx.fillStyle = '#dcebf7';
     ctx.fillRect(0, 0, tela.width, tela.height);
   }
-  // quem está mais abaixo aparece na frente
   Object.values(jogadores)
     .sort((a, b) => a.y - b.y)
     .forEach(desenharJogador);
