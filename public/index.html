@@ -1,12 +1,172 @@
-{
-  "container": {
-    "id": "f686363e-57a9-47db-86a0-74eadc1b8af1",
-    "kind": "project"
-  },
-  "engine": "prose",
-  "payload": "{\"ops\": [{\"op\": \"insert\", \"target\": {\"kind\": \"root\"}, \"side\": \"end\", \"source\": {\"as\": \"markdown\", \"from\": {\"kind\": \"inline\", \"content\": \"## Versão com a imagem de fundo\\n\\nO jogo usa a imagem image_7175d5d7.jpg, que já está na pasta public do GitHub. São dois arquivos para atualizar colando o código: primeiro o index.html, dentro da pasta public, e depois o server.js, na página principal do repositório. Em cada um, toque no arquivo, toque no lápis, selecione tudo, apague, cole o código e confirme com Commit changes.\\n\\n### index.html (pasta public)\\n\\n```html\\n<!DOCTYPE html>\\n<html lang=\\\"pt-BR\\\">\\n<head>\\n<meta charset=\\\"UTF-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width, initial-scale=1\\\">\\n<title>Guiana Brasileira</title>\\n<style>\\n  body { margin: 0; background: #1e2b37; font-family: Arial, sans-serif; color: white; text-align: center; }\\n  #topo { padding: 8px; font-size: 14px; }\\n  #topo input[type=text] { padding: 6px; border-radius: 6px; border: none; width: 140px; }\\n  #topo input[type=color] { vertical-align: middle; border: none; width: 36px; height: 30px; background: none; }\\n  #topo button { padding: 6px 12px; border: none; border-radius: 6px; background: #f1c40f; cursor: pointer; font-weight: bold; }\\n  #dica { font-size: 12px; opacity: 0.7; margin-left: 8px; }\\n  canvas { display: block; margin: 0 auto; cursor: pointer; max-width: 100vw; max-height: calc(100vh - 56px); }\\n</style>\\n</head>\\n<body>\\n<div id=\\\"topo\\\">\\n  Nome: <input type=\\\"text\\\" id=\\\"nome\\\" maxlength=\\\"14\\\" placeholder=\\\"Seu nome\\\">\\n  Cor: <input type=\\\"color\\\" id=\\\"cor\\\" value=\\\"#e74c3c\\\">\\n  <button id=\\\"ok\\\">Entrar na vila</button>\\n  <span id=\\\"dica\\\">Clique no chão ou numa loja para andar.</span>\\n</div>\\n<canvas id=\\\"tela\\\" width=\\\"896\\\" height=\\\"1200\\\"></canvas>\\n\\n<script src=\\\"/socket.io/socket.io.js\\\"></script>\\n<script>\\nconst socket = io();\\nconst tela = document.getElementById('tela');\\nconst ctx = tela.getContext('2d');\\n\\nconst fundo = new Image();\\nfundo.src = 'image_7175d5d7.jpg';\\n\\nlet meuId = null;\\nconst jogadores = {};\\n\\n// Lojas: área clicável (x, y, l, a) e ponto de chegada na frente da porta\\nconst lojas = [\\n  { nome: 'Nossa Rosa',   x: 0,   y: 390, l: 315, a: 280, portaX: 195, portaY: 715 },\\n  { nome: 'Onça Pintada', x: 315, y: 345, l: 310, a: 305, portaX: 460, portaY: 705 },\\n  { nome: 'Vish Sô',      x: 625, y: 395, l: 271, a: 295, portaX: 715, portaY: 725 }\\n];\\n\\nsocket.on('estadoInicial', (dados) => {\\n  meuId = dados.meuId;\\n  Object.assign(jogadores, dados.jogadores);\\n});\\nsocket.on('jogadorEntrou', (j) => { jogadores[j.id] = j; });\\nsocket.on('jogadorSaiu', (id) => { delete jogadores[id]; });\\nsocket.on('perfilAtualizado', (p) => {\\n  if (jogadores[p.id]) { jogadores[p.id].nome = p.nome; jogadores[p.id].cor = p.cor; }\\n});\\nsocket.on('posicoes', (pos) => {\\n  for (const id in pos) {\\n    if (jogadores[id]) { jogadores[id].x = pos[id].x; jogadores[id].y = pos[id].y; }\\n  }\\n});\\n\\nfunction entrar() {\\n  socket.emit('definirPerfil', {\\n    nome: document.getElementById('nome').value,\\n    cor: document.getElementById('cor').value\\n  });\\n}\\ndocument.getElementById('ok').onclick = entrar;\\ndocument.getElementById('nome').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };\\n\\n// Clique (ou toque) para andar\\ntela.addEventListener('click', (e) => {\\n  const r = tela.getBoundingClientRect();\\n  const x = (e.clientX - r.left) * (tela.width / r.width);\\n  const y = (e.clientY - r.top) * (tela.height / r.height);\\n  for (const loja of lojas) {\\n    if (x > loja.x && x < loja.x + loja.l && y > loja.y && y < loja.y + loja.a) {\\n      socket.emit('andarPara', { x: loja.portaX, y: loja.portaY });\\n      return;\\n    }\\n  }\\n  socket.emit('andarPara', { x, y });\\n});\\n\\nconst ESC = 1.5; // tamanho dos personagens\\n\\nfunction desenharJogador(j) {\\n  ctx.save();\\n  ctx.translate(j.x, j.y);\\n  ctx.scale(ESC, ESC);\\n  // sombra\\n  ctx.fillStyle = 'rgba(60,80,110,0.3)';\\n  ctx.beginPath(); ctx.ellipse(0, 22, 14, 6, 0, 0, Math.PI * 2); ctx.fill();\\n  // corpo\\n  ctx.fillStyle = j.cor;\\n  ctx.fillRect(-10, -6, 20, 26);\\n  // cabeça\\n  ctx.fillStyle = '#ffd7b0';\\n  ctx.beginPath(); ctx.arc(0, -14, 11, 0, Math.PI * 2); ctx.fill();\\n  // gorro de inverno\\n  ctx.fillStyle = j.cor;\\n  ctx.beginPath(); ctx.arc(0, -17, 11, Math.PI, 0); ctx.fill();\\n  ctx.fillStyle = '#ffffff';\\n  ctx.fillRect(-11, -18, 22, 4);\\n  ctx.beginPath(); ctx.arc(0, -29, 3.5, 0, Math.PI * 2); ctx.fill();\\n  // olhos\\n  ctx.fillStyle = '#222';\\n  ctx.fillRect(-5, -14, 3, 3);\\n  ctx.fillRect(2, -14, 3, 3);\\n  ctx.restore();\\n  // nome\\n  ctx.fillStyle = '#fff';\\n  ctx.strokeStyle = '#000';\\n  ctx.lineWidth = 4;\\n  ctx.font = 'bold 18px Arial';\\n  ctx.textAlign = 'center';\\n  ctx.strokeText(j.nome, j.x, j.y - 58);\\n  ctx.fillText(j.nome, j.x, j.y - 58);\\n}\\n\\nfunction desenhar() {\\n  ctx.clearRect(0, 0, tela.width, tela.height);\\n  if (fundo.complete && fundo.naturalWidth) {\\n    ctx.drawImage(fundo, 0, 0, tela.width, tela.height);\\n  } else {\\n    ctx.fillStyle = '#dcebf7';\\n    ctx.fillRect(0, 0, tela.width, tela.height);\\n  }\\n  // quem está mais abaixo aparece na frente\\n  Object.values(jogadores)\\n    .sort((a, b) => a.y - b.y)\\n    .forEach(desenharJogador);\\n  requestAnimationFrame(desenhar);\\n}\\ndesenhar();\\n</script>\\n</body>\\n</html>\\n```\\n\\n### server.js (página principal do repositório)\\n\\n```javascript\\nconst express = require('express');\\nconst http = require('http');\\nconst { Server } = require('socket.io');\\n\\nconst app = express();\\nconst server = http.createServer(app);\\nconst io = new Server(server);\\n\\napp.use(express.static('public'));\\n\\n// Tamanho do mundo = tamanho da imagem de fundo (em pixels)\\nconst MUNDO_L = 896;\\nconst MUNDO_A = 1200;\\n\\n// Área onde dá para caminhar: da frente das lojas até a parte de baixo\\nconst MIN_X = 30;\\nconst MAX_X = MUNDO_L - 30;\\nconst MIN_Y = 690;\\nconst MAX_Y = MUNDO_A - 50;\\n\\n// Todos os jogadores conectados\\nconst jogadores = {};\\n\\nio.on('connection', (socket) => {\\n  // Novo jogador nasce no meio da praça\\n  jogadores[socket.id] = {\\n    id: socket.id,\\n    nome: 'Visitante',\\n    cor: '#e74c3c',\\n    x: 448,\\n    y: 800,\\n    destinoX: 448,\\n    destinoY: 800\\n  };\\n\\n  socket.emit('estadoInicial', { meuId: socket.id, jogadores });\\n  socket.broadcast.emit('jogadorEntrou', jogadores[socket.id]);\\n\\n  socket.on('definirPerfil', (perfil) => {\\n    const j = jogadores[socket.id];\\n    if (!j) return;\\n    j.nome = String(perfil.nome || 'Visitante').slice(0, 14);\\n    j.cor = String(perfil.cor || '#e74c3c').slice(0, 7);\\n    io.emit('perfilAtualizado', { id: j.id, nome: j.nome, cor: j.cor });\\n  });\\n\\n  socket.on('andarPara', (destino) => {\\n    const j = jogadores[socket.id];\\n    if (!j) return;\\n    j.destinoX = Math.max(MIN_X, Math.min(MAX_X, Number(destino.x) || j.x));\\n    j.destinoY = Math.max(MIN_Y, Math.min(MAX_Y, Number(destino.y) || j.y));\\n  });\\n\\n  socket.on('disconnect', () => {\\n    delete jogadores[socket.id];\\n    io.emit('jogadorSaiu', socket.id);\\n  });\\n});\\n\\n// O servidor move os jogadores 20 vezes por segundo\\nconst VELOCIDADE = 5;\\nsetInterval(() => {\\n  const posicoes = {};\\n  for (const id in jogadores) {\\n    const j = jogadores[id];\\n    const dx = j.destinoX - j.x;\\n    const dy = j.destinoY - j.y;\\n    const dist = Math.sqrt(dx * dx + dy * dy);\\n    if (dist > VELOCIDADE) {\\n      j.x += (dx / dist) * VELOCIDADE;\\n      j.y += (dy / dist) * VELOCIDADE;\\n    } else {\\n      j.x = j.destinoX;\\n      j.y = j.destinoY;\\n    }\\n    posicoes[id] = { x: j.x, y: j.y };\\n  }\\n  io.emit('posicoes', posicoes);\\n}, 50);\\n\\nconst PORTA = process.env.PORT || 3000;\\nserver.listen(PORTA, () => {\\n  console.log('Guiana Brasileira rodando na porta ' + PORTA);\\n});\\n```\\n\"}}}]}",
-  "ref": {
-    "id": "7462520f-d5bd",
-    "object": "node"
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Guiana Brasileira</title>
+<style>
+  body { margin: 0; background: #2c3e50; font-family: Arial, sans-serif; color: white; text-align: center; }
+  #topo { padding: 8px; }
+  #topo input[type=text] { padding: 6px; border-radius: 6px; border: none; width: 140px; }
+  #topo input[type=color] { vertical-align: middle; border: none; width: 36px; height: 30px; }
+  #topo button { padding: 6px 12px; border: none; border-radius: 6px; background: #f1c40f; cursor: pointer; font-weight: bold; }
+  canvas { background: #7ec850; border: 4px solid #1e2b37; border-radius: 8px; cursor: pointer; max-width: 98vw; }
+  #dica { font-size: 13px; opacity: 0.8; padding: 4px; }
+</style>
+</head>
+<body>
+<div id="topo">
+  Nome: <input type="text" id="nome" maxlength="14" placeholder="Seu nome">
+  Cor: <input type="color" id="cor" value="#e74c3c">
+  <button id="ok">Entrar na vila</button>
+</div>
+<canvas id="tela" width="1200" height="800"></canvas>
+<div id="dica">Clique no chão para o seu personagem caminhar até lá.</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+const tela = document.getElementById('tela');
+const ctx = tela.getContext('2d');
+
+let meuId = null;
+const jogadores = {};
+
+// Comércios da vila (x, y, largura, altura, cor do telhado, nome)
+const comercios = [
+  { x: 160, y: 140, l: 180, a: 120, telhado: '#c0392b', nome: 'Padaria' },
+  { x: 460, y: 110, l: 200, a: 130, telhado: '#2980b9', nome: 'Fliperama' },
+  { x: 800, y: 150, l: 180, a: 120, telhado: '#8e44ad', nome: 'Loja de Jogos' }
+];
+
+const arvores = [
+  [80, 520], [140, 640], [1060, 520], [1100, 660], [300, 700],
+  [900, 700], [60, 330], [1120, 340], [700, 620], [480, 680]
+];
+
+socket.on('estadoInicial', (dados) => {
+  meuId = dados.meuId;
+  Object.assign(jogadores, dados.jogadores);
+});
+socket.on('jogadorEntrou', (j) => { jogadores[j.id] = j; });
+socket.on('jogadorSaiu', (id) => { delete jogadores[id]; });
+socket.on('perfilAtualizado', (p) => {
+  if (jogadores[p.id]) { jogadores[p.id].nome = p.nome; jogadores[p.id].cor = p.cor; }
+});
+socket.on('posicoes', (pos) => {
+  for (const id in pos) {
+    if (jogadores[id]) { jogadores[id].x = pos[id].x; jogadores[id].y = pos[id].y; }
   }
+});
+
+document.getElementById('ok').onclick = () => {
+  socket.emit('definirPerfil', {
+    nome: document.getElementById('nome').value,
+    cor: document.getElementById('cor').value
+  });
+};
+
+// Clique para andar
+tela.addEventListener('click', (e) => {
+  const r = tela.getBoundingClientRect();
+  const x = (e.clientX - r.left) * (tela.width / r.width);
+  const y = (e.clientY - r.top) * (tela.height / r.height);
+  // Se clicou num comércio, anda até a porta dele
+  for (const c of comercios) {
+    if (x > c.x && x < c.x + c.l && y > c.y && y < c.y + c.a) {
+      socket.emit('andarPara', { x: c.x + c.l / 2, y: c.y + c.a + 30 });
+      return;
+    }
+  }
+  socket.emit('andarPara', { x, y });
+});
+
+function desenharCasa(c) {
+  // sombra
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(c.x + 10, c.y + c.a - 4, c.l, 14);
+  // parede da frente
+  ctx.fillStyle = '#f5e6c8';
+  ctx.fillRect(c.x, c.y + 40, c.l, c.a - 40);
+  // telhado inclinado
+  ctx.fillStyle = c.telhado;
+  ctx.beginPath();
+  ctx.moveTo(c.x - 12, c.y + 44);
+  ctx.lineTo(c.x + 24, c.y);
+  ctx.lineTo(c.x + c.l - 24, c.y);
+  ctx.lineTo(c.x + c.l + 12, c.y + 44);
+  ctx.closePath();
+  ctx.fill();
+  // porta
+  ctx.fillStyle = '#6d4c2f';
+  ctx.fillRect(c.x + c.l / 2 - 16, c.y + c.a - 50, 32, 50);
+  // janelas
+  ctx.fillStyle = '#9ad7f5';
+  ctx.fillRect(c.x + 20, c.y + 60, 36, 30);
+  ctx.fillRect(c.x + c.l - 56, c.y + 60, 36, 30);
+  // placa
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(c.nome, c.x + c.l / 2, c.y + 36);
 }
+
+function desenharArvore(x, y) {
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath(); ctx.ellipse(x, y + 28, 26, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#7b5230';
+  ctx.fillRect(x - 7, y, 14, 30);
+  ctx.fillStyle = '#2e8b3d';
+  ctx.beginPath(); ctx.arc(x, y - 10, 30, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3fae51';
+  ctx.beginPath(); ctx.arc(x - 8, y - 18, 16, 0, Math.PI * 2); ctx.fill();
+}
+
+function desenharJogador(j) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(j.x, j.y + 22, 14, 6, 0, 0, Math.PI * 2); ctx.fill();
+  // corpo
+  ctx.fillStyle = j.cor;
+  ctx.fillRect(j.x - 10, j.y - 6, 20, 26);
+  // cabeça
+  ctx.fillStyle = '#ffd7b0';
+  ctx.beginPath(); ctx.arc(j.x, j.y - 14, 11, 0, Math.PI * 2); ctx.fill();
+  // olhos
+  ctx.fillStyle = '#222';
+  ctx.fillRect(j.x - 5, j.y - 16, 3, 3);
+  ctx.fillRect(j.x + 2, j.y - 16, 3, 3);
+  // nome
+  ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.font = 'bold 13px Arial';
+  ctx.textAlign = 'center';
+  ctx.strokeText(j.nome, j.x, j.y - 32);
+  ctx.fillText(j.nome, j.x, j.y - 32);
+}
+
+function desenhar() {
+  ctx.clearRect(0, 0, tela.width, tela.height);
+  // caminho de terra
+  ctx.fillStyle = '#d9b97a';
+  ctx.fillRect(0, 330, 1200, 110);
+  ctx.fillRect(560, 250, 90, 100);
+  // praça central
+  ctx.beginPath(); ctx.ellipse(600, 420, 120, 60, 0, 0, Math.PI * 2);
+  ctx.fillStyle = '#c9a869'; ctx.fill();
+  // fonte
+  ctx.fillStyle = '#7fb8e8';
+  ctx.beginPath(); ctx.ellipse(600, 420, 40, 20, 0, 0, Math.PI * 2); ctx.fill();
+
+  // desenha tudo ordenado por altura (quem está mais abaixo aparece na frente)
+  const itens = [];
+  comercios.forEach(c => itens.push({ y: c.y + c.a, f: () => desenharCasa(c) }));
+  arvores.forEach(a => itens.push({ y: a[1] + 30, f: () => desenharArvore(a[0], a[1]) }));
+  Object.values(jogadores).forEach(j => itens.push({ y: j.y + 20, f: () => desenharJogador(j) }));
+  itens.sort((a, b) => a.y - b.y).forEach(i => i.f());
+
+  requestAnimationFrame(desenhar);
+}
+desenhar();
+</script>
+</body>
+</html>
